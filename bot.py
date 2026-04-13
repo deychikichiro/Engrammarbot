@@ -97,40 +97,49 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ensure_user(user)
     log_message(user.id, user.username, user.first_name, "/start")
 
+    keyboard = [
+        [InlineKeyboardButton("My Plan", callback_data="show_plan"),
+         InlineKeyboardButton("Upgrade", callback_data="show_upgrade")],
+    ]
     await update.message.reply_text(
         "Welcome to English Grammar Assistant!\n\n"
         "Send me any text or voice message and I'll correct your grammar.\n\n"
-        "Free plan: 20 corrections/day\n"
-        "Type /plan to see your current usage.\n"
-        "Type /upgrade to see paid plans."
+        "Free plan: 20 corrections/day",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     ensure_user(user)
+    await send_plan_message(user, update.message.reply_text)
 
+
+async def send_plan_message(user, reply_fn):
     messages_today, plan, plan_expiry = get_usage(user.id)
 
     if plan == "free":
         remaining = FREE_LIMIT - messages_today
-        await update.message.reply_text(
+        keyboard = [[InlineKeyboardButton("Upgrade Plan", callback_data="show_upgrade")]]
+        await reply_fn(
             f"Plan: Free\n"
             f"Used today: {messages_today}/{FREE_LIMIT}\n"
-            f"Remaining: {remaining}\n\n"
-            f"Type /upgrade to get unlimited corrections."
+            f"Remaining: {remaining}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
     elif plan == "unlimited":
-        await update.message.reply_text(
+        await reply_fn(
             f"Plan: Unlimited\n"
             f"Used today: {messages_today}\n"
             f"No limits!"
         )
     else:
-        await update.message.reply_text(
+        keyboard = [[InlineKeyboardButton("Upgrade Plan", callback_data="show_upgrade")]]
+        await reply_fn(
             f"Plan: {plan.capitalize()}\n"
             f"Expires: {plan_expiry}\n"
-            f"Used today: {messages_today}"
+            f"Used today: {messages_today}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
 
@@ -150,6 +159,21 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def plan_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+
+    if query.data == "show_plan":
+        await send_plan_message(query.from_user, query.message.reply_text)
+        return
+
+    if query.data == "show_upgrade":
+        keyboard = [
+            [InlineKeyboardButton("1 Week — $1 (75 Stars)", callback_data="pay_weekly")],
+            [InlineKeyboardButton("1 Month — $3 (230 Stars)", callback_data="pay_monthly")],
+            [InlineKeyboardButton("1 Year — $15 (1150 Stars)", callback_data="pay_yearly")],
+            [InlineKeyboardButton("Unlimited — $20 (1500 Stars)", callback_data="pay_unlimited")],
+        ]
+        await query.message.reply_text("Choose a plan:", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+
     plan_key = query.data.replace("pay_", "")
     plan = PLANS[plan_key]
 
@@ -337,7 +361,7 @@ def main() -> None:
     application.add_handler(CommandHandler("monthly", monthly_command))
     application.add_handler(CommandHandler("yearly", yearly_command))
     application.add_handler(CommandHandler("unlimited", unlimited_command))
-    application.add_handler(CallbackQueryHandler(plan_button_handler, pattern="^pay_"))
+    application.add_handler(CallbackQueryHandler(plan_button_handler))
     application.add_handler(PreCheckoutQueryHandler(precheckout_handler))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
