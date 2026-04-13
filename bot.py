@@ -41,6 +41,7 @@ FREE_LIMIT = 20
 # Users with permanent unlimited access
 UNLIMITED_USERS = {
     1306045697,  # owner
+    792686373,   # unlimited user
 }
 
 # System prompt
