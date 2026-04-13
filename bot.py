@@ -106,7 +106,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
          InlineKeyboardButton("Upgrade", callback_data="show_upgrade")],
     ]
     await update.message.reply_text(
-        "Welcome to English Grammar Assistant!\n\n"
+        f"Hello, {user.first_name}! Welcome to English Grammar Assistant!\n\n"
         "Send me any text or voice message and I'll correct your grammar.\n\n"
         "Free plan: 20 corrections/day",
         reply_markup=InlineKeyboardMarkup(keyboard)
