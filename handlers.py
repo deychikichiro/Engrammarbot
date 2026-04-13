@@ -18,6 +18,13 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
 
+async def send_long_message(update: Update, text: str):
+    """Split and send messages exceeding Telegram's 4096 char limit."""
+    limit = 4096
+    for i in range(0, len(text), limit):
+        await update.message.reply_text(text[i:i + limit])
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def upgrade_keyboard():
@@ -250,7 +257,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 result = await translate_text(text, language)
                 log_message(user.id, user.username, user.first_name, f"[TEXT TRANSLATE → {language}]")
-                await update.message.reply_text(result)
+                await send_long_message(update, result)
             except Exception as e:
                 print(f"[ERROR] text translate: {e}")
                 await update.message.reply_text("Something went wrong. Please try again.")
@@ -275,7 +282,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 result = await extract_and_translate_image(file_path, language)
                 log_message(user.id, user.username, user.first_name, f"[PHOTO TRANSLATE → {language}]")
-                await update.message.reply_text(result)
+                await send_long_message(update, result)
             except Exception as e:
                 print(f"[ERROR] photo translate: {e}")
                 await update.message.reply_text("Something went wrong. Please try again.")
@@ -317,7 +324,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 result = await extract_and_translate_image(frame_path, language)
                 os.remove(frame_path)
                 log_message(user.id, user.username, user.first_name, f"[VIDEO TEXT TRANSLATE → {language}]")
-                await update.message.reply_text(result)
+                await send_long_message(update, result)
             except Exception as e:
                 print(f"[ERROR] video text translate: {e}")
                 await update.message.reply_text("Something went wrong. Please try again.")
@@ -356,7 +363,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         log_message(user.id, user.username, user.first_name, user_message)
-        await update.message.reply_text(correction)
+        await send_long_message(update, correction)
 
     except Exception as e:
         print(f"[ERROR] handle_text: {e}")
@@ -434,9 +441,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 {"role": "user",   "content": transcript_text}
             ]
         )
-        await update.message.reply_text(
-            f"Transcribed: {transcript_text}\n\n{response.choices[0].message.content}"
-        )
+        await send_long_message(update, f"Transcribed: {transcript_text}\n\n{response.choices[0].message.content}")
 
     except Exception as e:
         print(f"[ERROR] handle_voice: {e}")
