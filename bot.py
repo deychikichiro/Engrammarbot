@@ -297,13 +297,9 @@ async def post_init(application: Application) -> None:
     """Set bot command menu shown to users."""
     from telegram import BotCommand
     await application.bot.set_my_commands([
-        BotCommand("start",     "Welcome message"),
-        BotCommand("plan",      "Check your plan and daily usage"),
-        BotCommand("upgrade",   "See paid plans"),
-        BotCommand("weekly",    "1 week unlimited — $1"),
-        BotCommand("monthly",   "1 month unlimited — $3"),
-        BotCommand("yearly",    "1 year unlimited — $15"),
-        BotCommand("unlimited", "Unlimited forever — $20"),
+        BotCommand("start",   "Start the bot"),
+        BotCommand("plan",    "Check your plan and daily usage"),
+        BotCommand("upgrade", "Upgrade your plan"),
     ])
 
 
