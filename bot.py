@@ -9,7 +9,7 @@ from database import init_db
 from handlers import (
     start, plan_command, upgrade_command, admin_setplan,
     button_handler, precheckout_handler, successful_payment_handler,
-    handle_text, handle_voice, handle_video, error_handler
+    handle_text, handle_photo, handle_voice, handle_video, error_handler
 )
 
 
@@ -42,8 +42,9 @@ def main():
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
 
     # Messages
-    app.add_handler(MessageHandler(filters.TEXT  & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.VOICE,                    handle_voice))
+    app.add_handler(MessageHandler(filters.TEXT  & ~filters.COMMAND,   handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO,                      handle_photo))
+    app.add_handler(MessageHandler(filters.VOICE,                      handle_voice))
     app.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE, handle_video))
 
     app.add_error_handler(error_handler)

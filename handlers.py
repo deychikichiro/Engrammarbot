@@ -1,4 +1,6 @@
 import os
+import base64
+import cv2
 from datetime import datetime
 from groq import Groq
 from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
@@ -81,6 +83,22 @@ def is_allowed(user_id: int) -> bool:
     return check_and_increment(user_id)
 
 
+def image_to_base64(image_path: str) -> str:
+    with open(image_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+def extract_middle_frame(video_path: str, output_path: str) -> bool:
+    cap = cv2.VideoCapture(video_path)
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.set(cv2.CAP_PROP_POS_FRAMES, total // 2)
+    ret, frame = cap.read()
+    cap.release()
+    if ret:
+        cv2.imwrite(output_path, frame)
+    return ret
+
+
 # ── Command handlers ──────────────────────────────────────────────────────────
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -93,9 +111,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("Upgrade", callback_data="show_upgrade"),
     ]])
     await update.message.reply_text(
-        f"Hello, {user.first_name}! Welcome to English Grammar Assistant!\n\n"
-        "Send me any text or voice message and I'll correct your grammar.\n\n"
-        "Free plan: 20 corrections/day",
+        f"Hello, {user.first_name}! Welcome!\n\n"
+        "I can:\n"
+        "- Correct your English grammar (send text or voice)\n"
+        "- Translate text from photos\n"
+        "- Translate speech or text from videos\n\n"
+        "Free plan: 20 requests/day",
         reply_markup=keyboard
     )
 
@@ -162,12 +183,113 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     )
 
 
+# ── Translation helpers ───────────────────────────────────────────────────────
+
+async def translate_text(text: str, language: str) -> str:
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": f"Translate the following text to {language}. Return only the translation, nothing else."},
+            {"role": "user",   "content": text}
+        ]
+    )
+    return response.choices[0].message.content
+
+
+async def extract_and_translate_image(image_path: str, language: str) -> str:
+    b64 = image_to_base64(image_path)
+    response = client.chat.completions.create(
+        model="llama-3.2-11b-vision-preview",
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                {"type": "text", "text": f"Extract all visible text from this image and translate it to {language}. Format: first show the original text, then the translation."}
+            ]
+        }]
+    )
+    return response.choices[0].message.content
+
+
 # ── Message handlers ──────────────────────────────────────────────────────────
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_message = update.message.text
+    pending = context.user_data.get("pending")
 
+    # ── Handle pending translation states ──
+    if pending:
+        action = pending.get("action")
+
+        # User is choosing speech or text for video
+        if action == "video_choice":
+            choice = user_message.strip().lower()
+            if choice not in ("speech", "text"):
+                await update.message.reply_text("Please reply with 'speech' or 'text'.")
+                return
+            context.user_data["pending"]["action"] = f"video_{choice}_language"
+            await update.message.reply_text("What language should I translate to?")
+            return
+
+        # User is providing target language for photo
+        if action == "photo_language":
+            language = user_message.strip()
+            file_path = pending.get("file_path")
+            context.user_data.pop("pending", None)
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+            try:
+                result = await extract_and_translate_image(file_path, language)
+                log_message(user.id, user.username, user.first_name, f"[PHOTO TRANSLATE → {language}]")
+                await update.message.reply_text(result)
+            except Exception as e:
+                print(f"[ERROR] photo translate: {e}")
+                await update.message.reply_text("Something went wrong. Please try again.")
+            return
+
+        # User is providing target language for video speech
+        if action == "video_speech_language":
+            language = user_message.strip()
+            file_path = pending.get("file_path")
+            context.user_data.pop("pending", None)
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+            try:
+                with open(file_path, "rb") as f:
+                    transcription = client.audio.transcriptions.create(
+                        model="whisper-large-v3", file=f
+                    )
+                transcript = transcription.text
+                translation = await translate_text(transcript, language)
+                log_message(user.id, user.username, user.first_name, f"[VIDEO SPEECH TRANSLATE → {language}]")
+                await update.message.reply_text(
+                    f"Transcribed: {transcript}\n\nTranslation ({language}):\n{translation}"
+                )
+            except Exception as e:
+                print(f"[ERROR] video speech translate: {e}")
+                await update.message.reply_text("Something went wrong. Please try again.")
+            return
+
+        # User is providing target language for video text
+        if action == "video_text_language":
+            language = user_message.strip()
+            file_path = pending.get("file_path")
+            context.user_data.pop("pending", None)
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+            try:
+                frame_path = file_path.replace(".mp4", "_frame.jpg")
+                if not extract_middle_frame(file_path, frame_path):
+                    await update.message.reply_text("Could not extract frame from video.")
+                    return
+                result = await extract_and_translate_image(frame_path, language)
+                os.remove(frame_path)
+                log_message(user.id, user.username, user.first_name, f"[VIDEO TEXT TRANSLATE → {language}]")
+                await update.message.reply_text(result)
+            except Exception as e:
+                print(f"[ERROR] video text translate: {e}")
+                await update.message.reply_text("Something went wrong. Please try again.")
+            return
+
+    # ── Normal grammar correction ──
     if len(user_message.split()) < 2:
         await update.message.reply_text("Please send at least a full sentence to correct.")
         return
@@ -194,8 +316,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not is_allowed(user.id):
             await update.message.reply_text(
-                "You've reached your 20 free corrections today.\n\n"
-                "Upgrade to keep going:",
+                "You've reached your 20 free corrections today.\n\nUpgrade to keep going:",
                 reply_markup=upgrade_keyboard()
             )
             return
@@ -205,6 +326,35 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print(f"[ERROR] handle_text: {e}")
+        await update.message.reply_text("Something went wrong. Please try again.")
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    ensure_user(user.id, user.username, user.first_name)
+
+    if not is_allowed(user.id):
+        await update.message.reply_text(
+            "You've reached your 20 free requests today.\n\nUpgrade to keep going:",
+            reply_markup=upgrade_keyboard()
+        )
+        return
+
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        user_media_dir = os.path.join(MEDIA_DIR, str(user.id))
+        os.makedirs(user_media_dir, exist_ok=True)
+
+        photo = update.message.photo[-1]  # highest resolution
+        photo_file = await photo.get_file()
+        file_path = os.path.join(user_media_dir, f"photo_{timestamp}.jpg")
+        await photo_file.download_to_drive(file_path)
+
+        context.user_data["pending"] = {"action": "photo_language", "file_path": file_path}
+        await update.message.reply_text("What language should I translate the text to?")
+
+    except Exception as e:
+        print(f"[ERROR] handle_photo: {e}")
         await update.message.reply_text("Something went wrong. Please try again.")
 
 
@@ -258,6 +408,13 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     ensure_user(user.id, user.username, user.first_name)
 
+    if not is_allowed(user.id):
+        await update.message.reply_text(
+            "You've reached your 20 free requests today.\n\nUpgrade to keep going:",
+            reply_markup=upgrade_keyboard()
+        )
+        return
+
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         user_media_dir = os.path.join(MEDIA_DIR, str(user.id))
@@ -273,12 +430,14 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await video_file.download_to_drive(file_path)
         log_message(user.id, user.username, user.first_name, f"[VIDEO SAVED] {file_path}")
 
-    except Exception as e:
-        print(f"[ERROR] handle_video save: {e}")
+        context.user_data["pending"] = {"action": "video_choice", "file_path": file_path}
+        await update.message.reply_text(
+            "What do you want me to translate?\n\nReply with:\n'speech' — translate spoken audio\n'text' — translate text visible on screen"
+        )
 
-    await update.message.reply_text(
-        "Sorry, I can't process videos.\nPlease send an audio message or text instead."
-    )
+    except Exception as e:
+        print(f"[ERROR] handle_video: {e}")
+        await update.message.reply_text("Something went wrong. Please try again.")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
