@@ -8,6 +8,9 @@ venv/
 logs/
 media/
 
+# Database (contains user data)
+users.db
+
 # Python cache
 __pycache__/
 *.pyc
