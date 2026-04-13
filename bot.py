@@ -38,6 +38,11 @@ PLANS = {
 
 FREE_LIMIT = 20
 
+# Users with permanent unlimited access
+UNLIMITED_USERS = {
+    1306045697,  # owner
+}
+
 # System prompt
 SYSTEM_PROMPT = """You are an English grammar correction tool. You ONLY correct grammar in text provided to you.
 
@@ -293,7 +298,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             return
 
         # Only charge if we actually corrected something
-        if not check_and_increment(user.id):
+        if user.id not in UNLIMITED_USERS and not check_and_increment(user.id):
             await update.message.reply_text(upgrade_message())
             return
 
@@ -309,7 +314,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     ensure_user(user)
 
-    if not check_and_increment(user.id):
+    if user.id not in UNLIMITED_USERS and not check_and_increment(user.id):
         await update.message.reply_text(upgrade_message())
         return
 
