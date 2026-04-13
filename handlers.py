@@ -5,7 +5,7 @@ from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardM
 from telegram.ext import ContextTypes
 
 from config import (
-    GROQ_API_KEY, PLANS, FREE_LIMIT, UNLIMITED_USERS,
+    GROQ_API_KEY, PLANS, FREE_LIMIT,
     SYSTEM_PROMPT, LOGS_DIR, MEDIA_DIR, ADMIN_ID
 )
 from database import ensure_user, check_and_increment, get_usage, set_plan, get_user
@@ -78,7 +78,7 @@ async def send_plan_message(user, reply_fn):
 
 
 def is_allowed(user_id: int) -> bool:
-    return user_id in UNLIMITED_USERS or check_and_increment(user_id)
+    return check_and_increment(user_id)
 
 
 # ── Command handlers ──────────────────────────────────────────────────────────
