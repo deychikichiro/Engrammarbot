@@ -269,7 +269,6 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
-    ensure_user(user)
     user_message = update.message.text
 
     if len(user_message.strip()) < 3 or len(user_message.split()) < 2:
@@ -281,6 +280,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
+        ensure_user(user)
         response = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
@@ -379,6 +379,12 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    print(f"Error: {context.error}")
+    if isinstance(update, Update) and update.message:
+        await update.message.reply_text("Something went wrong. Please try again.")
+
+
 async def post_init(application: Application) -> None:
     """Set bot command menu shown to users."""
     from telegram import BotCommand
@@ -410,6 +416,8 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
     application.add_handler(MessageHandler(filters.VIDEO | filters.VIDEO_NOTE, handle_video))
+
+    application.add_error_handler(error_handler)
 
     print("Bot is running... Press Ctrl+C to stop")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
