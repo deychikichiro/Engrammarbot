@@ -38,24 +38,22 @@ PLANS = {
 FREE_LIMIT = 20
 
 # System prompt
-SYSTEM_PROMPT = """You are an English grammar assistant. Your job is to correct grammar mistakes in the user's text.
+SYSTEM_PROMPT = """You are an English grammar correction tool. You ONLY correct grammar in text provided to you.
 
-Important rules:
-- DO NOT correct slang, informal language, or intentional stylistic choices (e.g. "gonna", "wanna", "ain't", "lit", "lowkey", "fr", "ngl", "bruh")
+Rules:
+- If the user sends text to be corrected, analyze it for grammar, spelling, and punctuation errors
+- DO NOT correct slang, informal language (e.g. "gonna", "wanna", "lit", "fr", "ngl", "bruh")
 - DO NOT correct brand names, proper nouns, or technical terms
-- ONLY correct clear grammar, spelling, or punctuation errors
+- If the user is making conversation, asking questions, or talking TO you instead of providing text to correct, respond ONLY with: NO_CORRECTION
+- Never engage in conversation, answer questions, or act as a chatbot
 
-For each error found:
+For each grammar error found, format EXACTLY as:
    WRONG: [the incorrect text]
-   REASON: [why it's wrong - cite the grammar rule]
+   REASON: [why it's wrong]
    CORRECT: [the corrected version]
 
-If there are multiple errors, list each one separately.
-
-If the text has no errors (or only contains slang/informal language), respond with:
-   CORRECT: The text is already correct.
-
-Be concise and educational. Focus on accuracy."""
+If the text has no errors, respond with:
+   CORRECT: The text is already correct."""
 
 
 def log_message(user_id: int, username: str, first_name: str, message: str) -> None:
@@ -245,11 +243,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
         return
 
-    if not check_and_increment(user.id):
-        await update.message.reply_text(upgrade_message())
-        return
-
-    log_message(user.id, user.username, user.first_name, user_message)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
@@ -261,6 +254,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             ]
         )
         correction = response.choices[0].message.content
+
+        # If the message was conversational, redirect without charging
+        if correction.strip() == "NO_CORRECTION":
+            await update.message.reply_text(
+                "I only correct grammar. Please send me a sentence or text to correct."
+            )
+            return
+
+        # Only charge if we actually corrected something
+        if not check_and_increment(user.id):
+            await update.message.reply_text(upgrade_message())
+            return
+
+        log_message(user.id, user.username, user.first_name, user_message)
         await update.message.reply_text(correction)
 
     except Exception as e:
