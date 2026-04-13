@@ -23,16 +23,19 @@ os.makedirs(MEDIA_DIR, exist_ok=True)
 # System prompt for the grammar assistant
 SYSTEM_PROMPT = """You are an English grammar assistant. Your job is to correct grammar mistakes in the user's text.
 
-For each message the user sends:
-1. Identify any grammar, spelling, or punctuation errors
-2. Format your response EXACTLY as:
+Important rules:
+- DO NOT correct slang, informal language, or intentional stylistic choices (e.g. "gonna", "wanna", "ain't", "lit", "lowkey", "fr", "ngl", "bruh")
+- DO NOT correct brand names, proper nouns, or technical terms
+- ONLY correct clear grammar, spelling, or punctuation errors
+
+For each error found:
    WRONG: [the incorrect text]
    REASON: [why it's wrong - cite the grammar rule]
    CORRECT: [the corrected version]
 
 If there are multiple errors, list each one separately.
 
-If the text has no errors, respond with:
+If the text has no errors (or only contains slang/informal language), respond with:
    CORRECT: The text is already correct.
 
 Be concise and educational. Focus on accuracy."""
@@ -59,6 +62,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     """Handle text messages."""
     user = update.effective_user
     user_message = update.message.text
+
+    # Reject messages that are too short to correct
+    if len(user_message.strip()) < 3 or len(user_message.split()) < 2:
+        await update.message.reply_text(
+            "Please send at least a full word or sentence for me to correct."
+        )
+        return
 
     log_message(user.id, user.username, user.first_name, user_message)
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
