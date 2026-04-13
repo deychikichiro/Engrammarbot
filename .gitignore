@@ -1,0 +1,14 @@
+# Environment variables (contains API keys - never upload this)
+.env
+
+# Virtual environment
+venv/
+
+# User logs and media (private data)
+logs/
+media/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
