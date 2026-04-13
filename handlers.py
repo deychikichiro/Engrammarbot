@@ -183,12 +183,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         plan_key = query.data.replace("pay_", "")
         await send_invoice_to(context, query.message.chat_id, plan_key)
     elif query.data == "show_translate":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("Text",  callback_data="translate_text")],
-            [InlineKeyboardButton("Photo", callback_data="translate_photo")],
-            [InlineKeyboardButton("Video", callback_data="translate_video")],
-        ])
-        await query.message.reply_text("What do you want to translate?", reply_markup=keyboard)
+        context.user_data["pending"] = {"action": "translate_last_message"}
+        await query.message.reply_text("Target language?")
     elif query.data == "translate_text":
         context.user_data["pending"] = {"action": "translate_text_language"}
         await query.message.reply_text("Send the text you want to translate and the target language.\n\nExample: Hello world | Spanish")
@@ -252,6 +248,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── Handle pending translation states ──
     if pending:
         action = pending.get("action")
+
+        # Translate last corrected message
+        if action == "translate_last_message":
+            language = user_message.strip()
+            text = context.user_data.get("last_message", "")
+            context.user_data.pop("pending", None)
+            if not text:
+                await update.message.reply_text("No recent message found to translate.")
+                return
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+            try:
+                result = await translate_text(text, language)
+                log_message(user.id, user.username, user.first_name, f"[TRANSLATE → {language}]")
+                await send_long_message(update, result)
+            except Exception as e:
+                print(f"[ERROR] translate last message: {e}")
+                await update.message.reply_text("Something went wrong. Please try again.")
+            return
 
         # User sent "text | language" for direct text translation
         if action == "translate_text_language":
@@ -370,6 +384,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         log_message(user.id, user.username, user.first_name, user_message)
+        context.user_data["last_message"] = user_message
 
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("Translate", callback_data="show_translate")
