@@ -14,6 +14,7 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 # Initialize Groq client
 client = Groq(api_key=GROQ_API_KEY)
@@ -215,6 +216,35 @@ async def unlimited_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await send_invoice(update, context, "unlimited")
 
 
+async def admin_setplan(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin command: /setplan <user_id> <plan>"""
+    if update.effective_user.id != ADMIN_ID:
+        await update.message.reply_text("You are not authorized to use this command.")
+        return
+
+    args = context.args
+    if len(args) != 2:
+        await update.message.reply_text(
+            "Usage: /setplan <user_id> <plan>\n"
+            "Plans: free, weekly, monthly, yearly, unlimited"
+        )
+        return
+
+    user_id, plan = args[0], args[1]
+    valid_plans = ["free", "weekly", "monthly", "yearly", "unlimited"]
+
+    if plan not in valid_plans:
+        await update.message.reply_text(f"Invalid plan. Choose from: {', '.join(valid_plans)}")
+        return
+
+    if not get_user(int(user_id)):
+        await update.message.reply_text(f"User {user_id} not found in database.")
+        return
+
+    set_plan(int(user_id), plan)
+    await update.message.reply_text(f"User {user_id} has been set to {plan} plan.")
+
+
 async def precheckout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.pre_checkout_query.answer(ok=True)
 
@@ -362,6 +392,7 @@ def main() -> None:
     application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("setplan", admin_setplan))
     application.add_handler(CommandHandler("plan", plan_command))
     application.add_handler(CommandHandler("upgrade", upgrade_command))
     application.add_handler(CommandHandler("weekly", weekly_command))
