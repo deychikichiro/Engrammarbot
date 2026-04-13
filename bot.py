@@ -2,10 +2,10 @@ import os
 from groq import Groq
 from dotenv import load_dotenv
 from datetime import datetime
-from telegram import Update, LabeledPrice
+from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, MessageHandler, filters,
-    ContextTypes, CommandHandler, PreCheckoutQueryHandler
+    ContextTypes, CommandHandler, PreCheckoutQueryHandler, CallbackQueryHandler
 )
 from database import init_db, get_user, create_user, check_and_increment, get_usage, set_plan
 
@@ -135,12 +135,32 @@ async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    keyboard = [
+        [InlineKeyboardButton("1 Week — $1 (75 Stars)", callback_data="pay_weekly")],
+        [InlineKeyboardButton("1 Month — $3 (230 Stars)", callback_data="pay_monthly")],
+        [InlineKeyboardButton("1 Year — $15 (1150 Stars)", callback_data="pay_yearly")],
+        [InlineKeyboardButton("Unlimited — $20 (1500 Stars)", callback_data="pay_unlimited")],
+    ]
     await update.message.reply_text(
-        "Choose a plan:\n\n"
-        "/weekly — $1 for 1 week (75 Stars)\n"
-        "/monthly — $3 for 1 month (230 Stars)\n"
-        "/yearly — $15 for 1 year (1150 Stars)\n"
-        "/unlimited — $20 forever (1500 Stars)"
+        "Choose a plan:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def plan_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    plan_key = query.data.replace("pay_", "")
+    plan = PLANS[plan_key]
+
+    await context.bot.send_invoice(
+        chat_id=query.message.chat_id,
+        title=f"{plan['label']} Plan",
+        description=f"Unlimited grammar corrections for {plan['label']} ({plan['price']})",
+        payload=plan_key,
+        provider_token="",
+        currency="XTR",
+        prices=[LabeledPrice(plan["label"], plan["stars"])]
     )
 
 
@@ -317,6 +337,7 @@ def main() -> None:
     application.add_handler(CommandHandler("monthly", monthly_command))
     application.add_handler(CommandHandler("yearly", yearly_command))
     application.add_handler(CommandHandler("unlimited", unlimited_command))
+    application.add_handler(CallbackQueryHandler(plan_button_handler, pattern="^pay_"))
     application.add_handler(PreCheckoutQueryHandler(precheckout_handler))
     application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
