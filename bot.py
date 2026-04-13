@@ -151,6 +151,7 @@ async def send_invoice(update: Update, context: ContextTypes.DEFAULT_TYPE, plan_
         title=f"{plan['label']} Plan",
         description=f"Unlimited grammar corrections for {plan['label']} ({plan['price']})",
         payload=plan_key,
+        provider_token="",
         currency="XTR",
         prices=[LabeledPrice(plan["label"], plan["stars"])]
     )
@@ -292,12 +293,26 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def post_init(application: Application) -> None:
+    """Set bot command menu shown to users."""
+    from telegram import BotCommand
+    await application.bot.set_my_commands([
+        BotCommand("start",     "Welcome message"),
+        BotCommand("plan",      "Check your plan and daily usage"),
+        BotCommand("upgrade",   "See paid plans"),
+        BotCommand("weekly",    "1 week unlimited — $1"),
+        BotCommand("monthly",   "1 month unlimited — $3"),
+        BotCommand("yearly",    "1 year unlimited — $15"),
+        BotCommand("unlimited", "Unlimited forever — $20"),
+    ])
+
+
 def main() -> None:
     if not TELEGRAM_TOKEN or not GROQ_API_KEY:
         print("Error: TELEGRAM_BOT_TOKEN or GROQ_API_KEY not set in .env file")
         return
 
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("plan", plan_command))
