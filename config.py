@@ -15,6 +15,12 @@ MEDIA_DIR = "media"
 # Free tier limit (messages per day)
 FREE_LIMIT = 20
 
+# Users with permanent unlimited access
+UNLIMITED_USERS = {
+    1306045697,  # owner
+    792686373,   # unlimited user
+}
+
 # Telegram Stars pricing (1 star ≈ $0.013)
 PLANS = {
     "weekly":    {"stars": 75,   "label": "1 Week",    "price": "$1"},

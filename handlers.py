@@ -7,7 +7,7 @@ from telegram import Update, LabeledPrice, InlineKeyboardButton, InlineKeyboardM
 from telegram.ext import ContextTypes
 
 from config import (
-    GROQ_API_KEY, PLANS, FREE_LIMIT,
+    GROQ_API_KEY, PLANS, FREE_LIMIT, UNLIMITED_USERS,
     SYSTEM_PROMPT, LOGS_DIR, MEDIA_DIR, ADMIN_ID
 )
 from database import ensure_user, check_and_increment, get_usage, set_plan, get_user
@@ -80,7 +80,7 @@ async def send_plan_message(user, reply_fn):
 
 
 def is_allowed(user_id: int) -> bool:
-    return check_and_increment(user_id)
+    return user_id in UNLIMITED_USERS or check_and_increment(user_id)
 
 
 def image_to_base64(image_path: str) -> str:
@@ -199,7 +199,7 @@ async def translate_text(text: str, language: str) -> str:
 async def extract_and_translate_image(image_path: str, language: str) -> str:
     b64 = image_to_base64(image_path)
     response = client.chat.completions.create(
-        model="llama-3.2-11b-vision-preview",
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
         messages=[{
             "role": "user",
             "content": [
