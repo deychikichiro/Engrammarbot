@@ -7,7 +7,7 @@ from telegram.ext import (
 from config import TELEGRAM_TOKEN
 from database import init_db
 from handlers import (
-    start, plan_command, upgrade_command, admin_setplan,
+    start, plan_command, upgrade_command, translate_command, admin_setplan,
     button_handler, precheckout_handler, successful_payment_handler,
     handle_text, handle_photo, handle_voice, handle_video, error_handler
 )
@@ -15,9 +15,10 @@ from handlers import (
 
 async def post_init(application: Application):
     await application.bot.set_my_commands([
-        BotCommand("start",   "Start the bot"),
-        BotCommand("plan",    "Check your plan and daily usage"),
-        BotCommand("upgrade", "Upgrade your plan"),
+        BotCommand("start",     "Start the bot"),
+        BotCommand("plan",      "Check your plan and daily usage"),
+        BotCommand("translate", "Translate text, photo or video"),
+        BotCommand("upgrade",   "Upgrade your plan"),
     ])
 
 
@@ -31,10 +32,11 @@ def main():
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
 
     # Commands
-    app.add_handler(CommandHandler("start",   start))
-    app.add_handler(CommandHandler("plan",    plan_command))
-    app.add_handler(CommandHandler("upgrade", upgrade_command))
-    app.add_handler(CommandHandler("setplan", admin_setplan))
+    app.add_handler(CommandHandler("start",     start))
+    app.add_handler(CommandHandler("plan",      plan_command))
+    app.add_handler(CommandHandler("upgrade",   upgrade_command))
+    app.add_handler(CommandHandler("translate", translate_command))
+    app.add_handler(CommandHandler("setplan",   admin_setplan))
 
     # Inline buttons & payments
     app.add_handler(CallbackQueryHandler(button_handler))

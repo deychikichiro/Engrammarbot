@@ -111,11 +111,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("Upgrade", callback_data="show_upgrade"),
     ]])
     await update.message.reply_text(
-        f"Hello, {user.first_name}! Welcome!\n\n"
-        "I can:\n"
-        "- Correct your English grammar (send text or voice)\n"
-        "- Translate text from photos\n"
-        "- Translate speech or text from videos\n\n"
+        f"Hello, {user.first_name}.\n\n"
+        "Transgrammar — grammar correction and translation.\n\n"
+        "Send any text or voice message to correct grammar.\n"
+        "Use /translate to translate text, photos, or videos.\n\n"
         "Free plan: 20 requests/day",
         reply_markup=keyboard
     )
@@ -129,6 +128,15 @@ async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Choose a plan:", reply_markup=upgrade_keyboard())
+
+
+async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Text",  callback_data="translate_text")],
+        [InlineKeyboardButton("Photo", callback_data="translate_photo")],
+        [InlineKeyboardButton("Video", callback_data="translate_video")],
+    ])
+    await update.message.reply_text("What do you want to translate?", reply_markup=keyboard)
 
 
 async def admin_setplan(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -167,6 +175,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("pay_"):
         plan_key = query.data.replace("pay_", "")
         await send_invoice_to(context, query.message.chat_id, plan_key)
+    elif query.data == "translate_text":
+        context.user_data["pending"] = {"action": "translate_text_language"}
+        await query.message.reply_text("Send the text you want to translate and the target language.\n\nExample: Hello world | Spanish")
+    elif query.data == "translate_photo":
+        context.user_data["pending"] = {"action": "await_photo"}
+        await query.message.reply_text("Send the photo.")
+    elif query.data == "translate_video":
+        context.user_data["pending"] = {"action": "await_video"}
+        await query.message.reply_text("Send the video.")
 
 
 async def precheckout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -221,6 +238,23 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ── Handle pending translation states ──
     if pending:
         action = pending.get("action")
+
+        # User sent "text | language" for direct text translation
+        if action == "translate_text_language":
+            if "|" not in user_message:
+                await update.message.reply_text("Format: your text | target language\n\nExample: Hello world | Spanish")
+                return
+            text, language = [x.strip() for x in user_message.split("|", 1)]
+            context.user_data.pop("pending", None)
+            await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+            try:
+                result = await translate_text(text, language)
+                log_message(user.id, user.username, user.first_name, f"[TEXT TRANSLATE → {language}]")
+                await update.message.reply_text(result)
+            except Exception as e:
+                print(f"[ERROR] text translate: {e}")
+                await update.message.reply_text("Something went wrong. Please try again.")
+            return
 
         # User is choosing speech or text for video
         if action == "video_choice":
@@ -345,13 +379,18 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_media_dir = os.path.join(MEDIA_DIR, str(user.id))
         os.makedirs(user_media_dir, exist_ok=True)
 
-        photo = update.message.photo[-1]  # highest resolution
+        photo = update.message.photo[-1]
         photo_file = await photo.get_file()
         file_path = os.path.join(user_media_dir, f"photo_{timestamp}.jpg")
         await photo_file.download_to_drive(file_path)
 
+        # If user came from /translate → Photo button, skip asking
+        pending = context.user_data.get("pending", {})
+        if pending.get("action") == "await_photo":
+            context.user_data.pop("pending", None)
+
         context.user_data["pending"] = {"action": "photo_language", "file_path": file_path}
-        await update.message.reply_text("What language should I translate the text to?")
+        await update.message.reply_text("Target language?")
 
     except Exception as e:
         print(f"[ERROR] handle_photo: {e}")
@@ -432,7 +471,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data["pending"] = {"action": "video_choice", "file_path": file_path}
         await update.message.reply_text(
-            "What do you want me to translate?\n\nReply with:\n'speech' — translate spoken audio\n'text' — translate text visible on screen"
+            "What to translate?\n\nspeech — spoken audio\ntext — on-screen text"
         )
 
     except Exception as e:
