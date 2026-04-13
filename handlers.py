@@ -182,6 +182,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("pay_"):
         plan_key = query.data.replace("pay_", "")
         await send_invoice_to(context, query.message.chat_id, plan_key)
+    elif query.data == "show_translate":
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Text",  callback_data="translate_text")],
+            [InlineKeyboardButton("Photo", callback_data="translate_photo")],
+            [InlineKeyboardButton("Video", callback_data="translate_video")],
+        ])
+        await query.message.reply_text("What do you want to translate?", reply_markup=keyboard)
     elif query.data == "translate_text":
         context.user_data["pending"] = {"action": "translate_text_language"}
         await query.message.reply_text("Send the text you want to translate and the target language.\n\nExample: Hello world | Spanish")
@@ -363,7 +370,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         log_message(user.id, user.username, user.first_name, user_message)
-        await send_long_message(update, correction)
+
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("Translate", callback_data="show_translate")
+        ]])
+        for i in range(0, len(correction), 4096):
+            chunk = correction[i:i + 4096]
+            is_last = (i + 4096 >= len(correction))
+            await update.message.reply_text(
+                chunk,
+                reply_markup=keyboard if is_last else None
+            )
 
     except Exception as e:
         print(f"[ERROR] handle_text: {e}")
